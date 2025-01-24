@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="en" >
+<head>
+  <meta charset="UTF-8">
+  <title>Untitled</title>
+  
+
+</head>
+<body>
+<!-- partial:index.partial.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Live Chart with Volatility Market and RSI</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      margin: 0;
+      background-color: #eaf7f8;
+      flex-direction: column;
+      padding: 0 10px;
+    }
+    .chart-container {
+      width: 100%;
+      max-width: 90%;
+      height: 50vh;
+      margin-bottom: 20px;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+    h1 {
+      font-size: 1.5rem;
+      margin-bottom: 20px;
+    }
+    .market-buttons {
+      display: flex;
+      justify-content: center;
+      margin-bottom: 20px;
+    }
+    .market-buttons button {
+      margin: 0 10px;
+      padding: 10px;
+      background-color: #62a4ab;
+      color: white;
+      border: none;
+      cursor: pointer;
+    }
+    .market-buttons button:hover {
+      background-color: #4b8b8d;
+    }
+    .signal {
+      font-size: 1.2rem;
+      margin-top: 20px;
+      font-weight: bold;
+    }
+    .rise {
+      color: green;
+    }
+    .fall {
+      color: red;
+    }
+    .buy-signal {
+      color: blue;
+    }
+  </style>
+</head>
+<body>
+  <h1>Live Chart Volatility Market</h1>
+
+  <div class="market-buttons">
+    <button onclick="selectMarket('R_10')">Volatility 10</button>
+    <button onclick="selectMarket('R_25')">Volatility 25</button>
+    <button onclick="selectMarket('R_50')">Volatility 50</button>
+    <button onclick="selectMarket('R_75')">Volatility 75</button>
+    <button onclick="selectMarket('R_100')">Volatility 100</button>
+  </div>
+
+  <div class="chart-container">
+    <canvas id="dynamicChart"></canvas>
+  </div>
+
+  <div id="signal" class="signal"></div>
+
+  <script>
+    const ctx = document.getElementById('dynamicChart').getContext('2d');
+    const dynamicChart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: [],
+        datasets: [{
+          label: 'Price',
+          data: [],
+          borderColor: '#62a4ab',
+          backgroundColor: 'rgba(98, 164, 171, 0.2)',
+          borderWidth: 2,
+          tension: 0.4
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: true },
+          tooltip: { enabled: true }
+        },
+        scales: {
+          y: {
+            beginAtZero: false,
+            grid: { color: '#d3e9eb' }
+          },
+          x: {
+            grid: { color: '#d3e9eb' }
+          }
+        }
+      }
+    });
+
+    const API_TOKEN = 'Je5KwLgHrMOuIya';
+    const API_URL = 'wss://ws.binaryws.com/websockets/v3?app_id=67562';
+
+    let connection = null;
+    let previousPrices = [];
+    let trendDirection = null; // 'up' or 'down'
+
+    function selectMarket(market) {
+      if (connection && connection.readyState === WebSocket.OPEN) {
+        connection.close();
+      }
+
+      connection = new WebSocket(API_URL);
+
+      connection.onopen = () => {
+        connection.send(JSON.stringify({ authorize: API_TOKEN }));
+        connection.send(JSON.stringify({
+          ticks: market,
+          subscribe: 1
+        }));
+      };
+
+      connection.onmessage = (event) => {
+        const response = JSON.parse(event.data);
+
+        if (response.msg_type === 'tick') {
+          const tick = response.tick;
+          const price = tick.quote;
+          const time = new Date(tick.epoch * 1000).toLocaleTimeString();
+
+          dynamicChart.data.labels.push(time);
+          dynamicChart.data.datasets[0].data.push(price);
+          if (dynamicChart.data.labels.length > 10) {
+            dynamicChart.data.labels.shift();
+            dynamicChart.data.datasets[0].data.shift();
+          }
+
+          previousPrices.push(price);
+          if (previousPrices.length > 6) {
+            previousPrices.shift();
+          }
+
+          detectTrends(previousPrices);
+
+          dynamicChart.update();
+        }
+      };
+
+      connection.onerror = (error) => {
+        console.error('WebSocket error:', error);
+      };
+
+      connection.onclose = () => {
+        console.log('WebSocket disconnected');
+      };
+    }
+
+    function detectTrends(prices) {
+      if (prices.length >= 3) {
+        let falling = true, rising = true;
+        for (let i = prices.length - 1; i > prices.length - 4; i--) {
+          if (prices[i] >= prices[i - 1]) falling = false;
+        }
+        for (let i = prices.length - 1; i > prices.length - 4; i--) {
+          if (prices[i] <= prices[i - 1]) rising = false;
+        }
+
+        const signalElement = document.getElementById('signal');
+        
+        if (falling && trendDirection !== 'fall') {
+          trendDirection = 'fall';
+          signalElement.textContent = 'Rise Signal';
+          signalElement.className = 'signal rise';
+        } else if (rising && trendDirection !== 'rise') {
+          trendDirection = 'rise';
+          signalElement.textContent = 'Fall Signal';
+          signalElement.className = 'signal fall';
+        } else {
+          signalElement.textContent = '';
+          signalElement.className = 'signal';
+        }
+      }
+    }
+  </script>
+</body>
+</html>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Smart Trader - Live Market Data</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      text-align: center;
+      background-color: #f4f4f9;
+      color: #333;
+      margin: 0;
+      padding: 0;
+    }
+    .container {
+      padding: 20px;
+    }
+    .market-title {
+      font-size: 24px;
+      margin-bottom: 10px;
+    }
+    .live-price {
+      font-size: 36px;
+      font-weight: bold;
+      color: #2a9d8f;
+      margin-bottom: 20px;
+    }
+    .status {
+      font-size: 16px;
+      color: #e76f51;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Smart Trader - Live Market Data</h1>
+    <div class="market-title">Volatility 100 Index</div>
+    <div class="live-price" id="livePrice">Loading...</div>
+    <div class="status" id="status">Connecting to Deriv API...</div>
+  </div>
+
+  <script>
+    // Replace this with your Deriv API token
+    const DERIV_API_TOKEN = 'your_api_token_here';
+
+    // WebSocket connection to Deriv API
+    const ws = new WebSocket('wss://ws.binaryws.com/websockets/v3?app_id=1089');
+
+    const statusElement = document.getElementById('status');
+    const priceElement = document.getElementById('livePrice');
+
+    ws.onopen = () => {
+      statusElement.textContent = 'Connected to Deriv API. Fetching data...';
+
+      // Subscribe to Volatility 100 Index ticks
+      ws.send(JSON.stringify({
+        ticks: 'R_100', // Volatility 100 Index symbol
+        subscribe: 1,
+        passthrough: { token: DERIV_API_TOKEN }
+      }));
+    };
+
+    ws.onmessage = (event) => {
+      const data = JSON.parse(event.data);
+
+      if (data.error) {
+        statusElement.textContent = `Error: ${data.error.message}`;
+        return;
+      }
+
+      if (data.tick) {
+        const price = data.tick.quote;
+        priceElement.textContent = price.toFixed(2); // Show live price
+        statusElement.textContent = 'Live data updated.';
+      }
+    };
+
+    ws.onerror = (error) => {
+      statusElement.textContent = `Connection error: ${error.message}`;
+    };
+
+    ws.onclose = () => {
+      statusElement.textContent = 'Connection closed. Reconnecting...';
+    };
+  </script>
+</body>
+</html>
+<!-- partial -->
+  
+</body>
+</html>
